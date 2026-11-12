@@ -13,10 +13,12 @@ const myName=()=>clean($('#name').value);
 const ALPHA='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const mkCode=()=>Array.from({length:6},()=>ALPHA[rnd(ALPHA.length)]).join('');
 
+const CN={r:'rouge',y:'jaune',g:'vert',b:'bleu'},LB={s:'Passe',r:'Inverse',d2:'+2',w:'Joker',w4:'+4'};
+const lbl=(c,col)=>c.c==='w'?LB[c.v]+' → '+CN[col]:(LB[c.v]||c.v)+' '+CN[c.c];
 /* ---------- Moteur de jeu (tourne uniquement chez l'hôte) ---------- */
 class Game{
   constructor(players){
-    this.p=players;this.dir=1;this.turn=0;this.over=null;this.drew=-1;this.log='';
+    this.p=players;this.dir=1;this.turn=0;this.over=null;this.drew=-1;this.log='';this.hist=players.map(()=>[]);
     this.deck=[];for(const c of'rygb'){this.deck.push({c,v:'0'});for(let v=1;v<=9;v++)this.deck.push({c,v:''+v},{c,v:''+v});for(const v of['s','r','d2'])this.deck.push({c,v},{c,v})}
     for(let i=0;i<4;i++)this.deck.push({c:'w',v:'w'},{c:'w',v:'w4'});
     shuffle(this.deck);this.disc=[];
@@ -24,6 +26,7 @@ class Game{
     let t;do{t=this.draw();if(t.c==='w')this.deck.unshift(t)}while(t.c==='w');
     this.disc.push(t);this.top=t;this.col=t.c;
   }
+  note(s,t){const h=this.hist[s];h.unshift(t);if(h.length>3)h.pop()}
   draw(){if(!this.deck.length&&this.disc.length>1){const t=this.disc.pop();this.deck=shuffle(this.disc);this.disc=[t]}return this.deck.pop()||{c:'w',v:'w'}}
   next(n=1){const L=this.p.length;return(((this.turn+this.dir*n)%L)+L)%L}
   play(s,i,col){
@@ -31,21 +34,21 @@ class Game{
     const h=this.p[s].hand,c=h[i];
     if(!c||!ok(c,this.top,this.col)||(c.c==='w'&&!'rygb'.includes(col)))return;
     h.splice(i,1);this.disc.push(c);this.top=c;this.col=c.c==='w'?col:c.c;this.drew=-1;
-    this.log=this.p[s].name+' a joué';
-    if(!h.length){this.over=s;return}
+    this.note(s,'a joué '+lbl(c,this.col)+(h.length===1?' — UNO !':''));
+    if(!h.length){this.over=s;this.note(s,'a gagné !');return}
     let skip=0;
     if(c.v==='s')skip=1;
     else if(c.v==='r'){if(this.p.length===2)skip=1;else this.dir*=-1}
-    else if(c.v==='d2'||c.v==='w4'){const t=this.next();for(let k=0;k<(c.v==='d2'?2:4);k++)this.p[t].hand.push(this.draw());skip=1}
+    else if(c.v==='d2'||c.v==='w4'){const t=this.next();const n=c.v==='d2'?2:4;for(let k=0;k<n;k++)this.p[t].hand.push(this.draw());this.note(t,'a pioché '+n+' cartes');skip=1}
     this.turn=this.next(1+skip);
   }
   pick(s){
     if(this.over!==null||s!==this.turn)return;
-    if(this.drew===s){this.drew=-1;this.turn=this.next();return}
-    const c=this.draw();this.p[s].hand.push(c);this.log=this.p[s].name+' a pioché';
+    if(this.drew===s){this.drew=-1;this.note(s,'a passé son tour');this.turn=this.next();return}
+    const c=this.draw();this.p[s].hand.push(c);this.note(s,'a pioché une carte');
     if(ok(c,this.top,this.col))this.drew=s;else this.turn=this.next();
   }
-  view(s){return{me:s,hand:this.p[s].hand,pl:this.p.map(x=>({n:x.name,c:x.hand.length})),top:this.top,col:this.col,turn:this.turn,over:this.over,log:this.log}}
+  view(s){return{me:s,hand:this.p[s].hand,pl:this.p.map(x=>({n:x.name,c:x.hand.length})),top:this.top,col:this.col,turn:this.turn,over:this.over,hist:this.hist.map(a=>a.slice())}}
 }
 
 /* ---------- État réseau / session ---------- */
@@ -99,7 +102,9 @@ function renderGame(v){
   const o=$('#opps');o.replaceChildren();
   v.pl.forEach((p,i)=>{if(i===v.me)return;
     const d=el('div','opp'+(v.turn===i?' turn':''),String(p.n));
-    d.appendChild(el('small','',p.c+(p.c===1?' carte — UNO !':' cartes')));o.appendChild(d)});
+    d.appendChild(el('small','',p.c+(p.c===1?' carte':' cartes')));
+    const hs=el('div','hist');((v.hist&&v.hist[i])||[]).slice(0,3).forEach(t=>hs.appendChild(el('div','',String(t))));d.appendChild(hs);o.appendChild(d)});
+  $('#myhist').textContent=((v.hist&&v.hist[v.me])||[]).slice(0,2).join(' · ');
   $('#pile').replaceChildren(cardEl(v.top));$('#colbar').style.background=COL[v.col]||'#fff';
   const mine=v.turn===v.me&&v.over===null;
   $('#status').textContent=v.over!==null?'':mine?'À toi de jouer':'Tour de '+v.pl[v.turn].n;
