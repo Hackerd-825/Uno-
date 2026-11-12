@@ -13,7 +13,8 @@
     <section><h2>Contre des bots</h2>
       <label>Nombre de bots <select id="nbots"><option>1</option><option selected>2</option><option>3</option></select></label>
       <button id="bBots">Jouer</button></section>
-    <section><h2>1 contre 1 avec un code</h2>
+    <section><h2>Partie privée avec code</h2>
+      <label>Joueurs max <select id="pmax"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
       <button id="bCreate">Créer une partie</button>
       <input id="code" maxlength="6" placeholder="CODE" autocomplete="off" aria-label="Code à 6 caractères">
       <button id="bJoin">Rejoindre</button></section>
@@ -25,12 +26,14 @@
 <main id="lobby" class="screen" hidden>
   <h2 id="lTitle">Salle d’attente</h2>
   <div id="codeBox" hidden><p>Envoie ce code à ton adversaire :</p><b id="codeShow"></b><button id="bCopy">Copier</button></div>
-  <ul id="lList"></ul><p id="lInfo">En attente de joueurs…</p>
-  <button id="bCancel" class="ghost">Annuler</button>
+  <div id="spin" class="radar"></div><div id="cd" hidden></div>
+  <ul id="lList"></ul><p id="lInfo"></p>
+  <button id="bStart" hidden>Lancer la partie</button>
+  <button id="bCancel" class="ghost">Quitter</button>
 </main>
 <main id="game" class="screen" hidden>
   <div id="opps"></div>
-  <div id="table"><button id="deck" aria-label="Piocher">Pioche</button><div id="pile"></div><i id="colbar"></i></div>
+  <div id="table"><button id="deck" aria-label="Piocher une carte"><span>UNO</span></button><div id="pile"></div><i id="colbar"></i></div>
   <p id="status" role="status"></p>
   <div id="hand"></div>
   <div id="picker" hidden><p>Choisis une couleur</p><div id="pcols"></div></div>

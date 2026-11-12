@@ -49,9 +49,10 @@ class Game{
 }
 
 /* ---------- État réseau / session ---------- */
-let peer=null,conn=null,role=null,lobby=null,G=null,started=false,bt=0,lt=0,lastView=null,pendingWild=-1;
+let srch=0,peer=null,conn=null,role=null,lobby=null,G=null,started=false,bt=0,lt=0,lastView=null,pendingWild=-1;
 
 function reset(){
+  srch++;
   clearTimeout(bt);clearTimeout(lt);
   try{peer&&peer.destroy()}catch{}
   peer=conn=role=lobby=G=lastView=null;started=false;
@@ -74,7 +75,7 @@ function botMove(s){
   G.play(s,i,Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]);
 }
 function startGame(){
-  started=true;clearTimeout(lt);
+  started=true;clearInterval(lt);lobby.cd=null;
   G=new Game(lobby.players);show('game');update();
 }
 function act(s,t,i,col){
@@ -89,8 +90,8 @@ function send(t,i,col){
 
 /* ---------- Rendu ---------- */
 function cardEl(c){
-  const e=el('div','card '+c.c);e.style.background=COL[c.c];
-  e.appendChild(el('span','',SYM[c.v]||c.v));return e;
+  const s=SYM[c.v]||c.v,e=el('div','card '+c.c),o=el('div','oval');
+  o.appendChild(el('span','mid',s));e.append(o,el('span','cn tl',s),el('span','cn br',s));return e;
 }
 function renderGame(v){
   if(!v||!Array.isArray(v.hand)||!Array.isArray(v.pl))return;
@@ -112,36 +113,46 @@ function renderGame(v){
   $('#deck').disabled=!mine;
   if(v.over!==null){$('#endT').textContent=v.over===v.me?'Tu as gagné !':v.pl[v.over].n+' a gagné';$('#end').hidden=false}
 }
-function drawLobby(names,code){
-  show('lobby');const u=$('#lList');u.replaceChildren();
-  names.forEach(n=>u.appendChild(el('li','',n)));
+function drawLobby(names,max,cd,code,canStart,pub){
+  show('lobby');$('#lTitle').textContent=pub?'Partie publique':'Partie privée';
+  const u=$('#lList');u.replaceChildren();
+  for(let i=0;i<max;i++){const f=i<names.length,s=el('li','slot'+(f?' full':''));
+    s.append(el('b','av',f?names[i].slice(0,1).toUpperCase():'?'),el('span','',f?names[i]:'En attente d’un joueur…'));u.appendChild(s)}
   $('#codeBox').hidden=!code;if(code)$('#codeShow').textContent=code;
+  $('#bStart').hidden=!canStart;$('#bStart').disabled=names.length<2;
+  $('#cd').hidden=cd==null;$('#cd').textContent=cd==null?'':cd;$('#spin').hidden=cd!=null;
+  $('#lInfo').textContent=cd!=null?'La partie commence…':names.length<2?(pub?'Recherche de joueurs…':'Partage le code pour inviter des joueurs.'):canStart?'Lance la partie quand tout le monde est là.':pub?'Plus de joueurs ? Sinon on démarre bientôt.':'L’hôte va lancer la partie.';
 }
 
 /* ---------- Réseau (WebRTC via PeerJS, l'hôte fait autorité) ---------- */
-function lobbyChanged(pub){
-  const names=lobby.players.map(p=>p.name);
-  lobby.players.forEach(p=>p.conn&&p.conn.open&&p.conn.send({t:'l',n:names}));
-  drawLobby(names,lobby.code);clearTimeout(lt);
-  if(lobby.players.length>=lobby.max)startGame();
-  else if(pub&&lobby.players.length>=2){$('#lInfo').textContent='La partie démarre dans 8 secondes…';lt=setTimeout(startGame,8000)}
+function lobbyBroadcast(){
+  const names=lobby.players.map(p=>p.name),m={t:'l',n:names,max:lobby.max,cd:lobby.cd,code:lobby.code,pub:lobby.pub};
+  lobby.players.forEach(p=>p.conn&&p.conn.open&&p.conn.send(m));
+  drawLobby(names,lobby.max,lobby.cd,lobby.code,role==='host'&&!lobby.pub,lobby.pub);
+}
+function lobbyChanged(){
+  clearInterval(lt);lobby.cd=null;
+  if(lobby.players.length>=lobby.max){startGame();return}
+  if(lobby.pub&&lobby.players.length>=2){
+    lobby.cd=8;lt=setInterval(()=>{lobby.cd--;if(lobby.cd<=0)startGame();else lobbyBroadcast()},1000)}
+  lobbyBroadcast();
 }
 function hostNet(id,max,pub,code){
   return new Promise((res,rej)=>{
     const p=new Peer(id);peer=p;p.on('error',rej);
     p.on('open',()=>{
-      role='host';started=false;lobby={players:[{name:myName()}],max,code};res();lobbyChanged(pub);
+      role='host';started=false;lobby={players:[{name:myName()}],max,code,pub,cd:null};res();lobbyChanged();
       p.on('connection',c=>{
         const me={name:'',conn:c};let joined=false;
         c.on('data',d=>{
           if(!d||typeof d!=='object')return;
           if(d.t==='hello'&&!joined){
             if(started||lobby.players.length>=max){c.send({t:'full'});setTimeout(()=>c.close(),300);return}
-            joined=true;me.name=clean(d.n);lobby.players.push(me);lobbyChanged(pub);return}
+            joined=true;me.name=clean(d.n);lobby.players.push(me);lobbyChanged();return}
           if(joined&&started&&(d.t==='draw'||(d.t==='play'&&Number.isInteger(d.i))))act(lobby.players.indexOf(me),d.t,d.i,d.col)});
         c.on('close',()=>{
           if(!joined)return;
-          if(!started){lobby.players.splice(lobby.players.indexOf(me),1);lobbyChanged(pub)}
+          if(!started){lobby.players.splice(lobby.players.indexOf(me),1);lobbyChanged()}
           else{me.bot=true;me.conn=null;me.name+=' (bot)';if(G&&G.over===null)update()}});
       });
     });
@@ -159,7 +170,7 @@ function joinNet(id,timeout){
         if(!d||typeof d!=='object')return;
         if(d.t==='full'){fail('full');return}
         if(!done){done=true;clearTimeout(to);peer=p;conn=c;role='guest';res()}
-        if(d.t==='l'&&Array.isArray(d.n))drawLobby(d.n.map(clean));
+        if(d.t==='l'&&Array.isArray(d.n)){const mx=Math.min(6,Math.max(2,+d.max||2));drawLobby(d.n.slice(0,6).map(clean),mx,Number.isInteger(d.cd)?d.cd:null,/^[A-Z0-9]{6}$/.test(d.code)?d.code:null,false,!!d.pub)}
         if(d.t==='s'){show('game');renderGame(d.v)}});
       c.on('close',()=>{if(!done)fail('closed');else if(role==='guest'&&!(lastView&&lastView.over!==null)){alert('L’hôte a quitté la partie.');reset()}});
     });
@@ -178,7 +189,7 @@ $('#bCreate').onclick=async()=>{
   toast('');
   for(let k=0;k<5;k++){
     const code=mkCode();
-    try{await hostNet('unoz-'+code,2,false,code);$('#lInfo').textContent='En attente de ton adversaire…';return}
+    try{await hostNet('unoz-'+code,Math.min(6,Math.max(2,+$('#pmax').value||2)),false,code);return}
     catch(e){try{peer.destroy()}catch{};if(e.type!=='unavailable-id'){toast('Connexion impossible. Réessaie.');return}}
   }
 };
@@ -190,14 +201,16 @@ $('#bJoin').onclick=async()=>{
   catch(e){toast(e==='full'?'Cette partie est déjà complète.':'Code introuvable ou hôte hors ligne.')}
 };
 $('#bPub').onclick=async()=>{
-  toast('Recherche d’une partie…');
+  const my=++srch;toast('');drawLobby([],4,null,null,false,true);
   for(let i=0;i<12;i++){
-    try{await hostNet('unopub-'+i,4,true);toast('');$('#lInfo').textContent='En attente d’autres joueurs…';return}
+    if(my!==srch)return;
+    try{await hostNet('unopub-'+i,4,true);return}
     catch(e){try{peer.destroy()}catch{};if(e.type!=='unavailable-id'){toast('Connexion impossible. Réessaie.');return}}
-    try{await joinNet('unopub-'+i,5000);toast('');return}catch{}
+    try{await joinNet('unopub-'+i,5000);if(my!==srch)reset();return}catch{}
   }
-  toast('Aucune partie libre trouvée. Réessaie.');
+  if(my!==srch)return;show('menu');toast('Aucune partie libre trouvée. Réessaie.');
 };
+$('#bStart').onclick=()=>{if(role==='host'&&lobby&&!started&&lobby.players.length>=2)startGame()};
 $('#bCancel').onclick=reset;$('#bEnd').onclick=reset;
 $('#bCopy').onclick=()=>navigator.clipboard&&navigator.clipboard.writeText($('#codeShow').textContent).then(()=>$('#bCopy').textContent='Copié');
 $('#deck').onclick=()=>send('draw');
