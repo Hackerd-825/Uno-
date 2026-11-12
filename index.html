@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Uno en ligne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head>
+<body>
+<main id="menu" class="screen">
+  <h1>UNO</h1>
+  <label>Ton pseudo <input id="name" maxlength="14" autocomplete="off"></label>
+  <div class="grid">
+    <section><h2>Contre des bots</h2>
+      <label>Nombre de bots <select id="nbots"><option>1</option><option selected>2</option><option>3</option></select></label>
+      <button id="bBots">Jouer</button></section>
+    <section><h2>1 contre 1 avec un code</h2>
+      <button id="bCreate">Créer une partie</button>
+      <input id="code" maxlength="6" placeholder="CODE" autocomplete="off" aria-label="Code à 6 caractères">
+      <button id="bJoin">Rejoindre</button></section>
+    <section><h2>Partie publique</h2><p>2 à 4 joueurs au hasard.</p>
+      <button id="bPub">Trouver des joueurs</button></section>
+  </div>
+  <p id="msg" role="status"></p>
+</main>
+<main id="lobby" class="screen" hidden>
+  <h2 id="lTitle">Salle d’attente</h2>
+  <div id="codeBox" hidden><p>Envoie ce code à ton adversaire :</p><b id="codeShow"></b><button id="bCopy">Copier</button></div>
+  <ul id="lList"></ul><p id="lInfo">En attente de joueurs…</p>
+  <button id="bCancel" class="ghost">Annuler</button>
+</main>
+<main id="game" class="screen" hidden>
+  <div id="opps"></div>
+  <div id="table"><button id="deck" aria-label="Piocher">Pioche</button><div id="pile"></div><i id="colbar"></i></div>
+  <p id="status" role="status"></p>
+  <div id="hand"></div>
+  <div id="picker" hidden><p>Choisis une couleur</p><div id="pcols"></div></div>
+  <div id="end" hidden><h2 id="endT"></h2><button id="bEnd">Retour au menu</button></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="app.js"></script>
+</body></html>
